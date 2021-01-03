@@ -11,9 +11,10 @@ import (
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/reassembly"
 	"sync"
+	"tls_decript/mytls"
+	"tls_decript/mytls/tlsx"
 	"tls_decript/utils"
 )
-
 
 /*
 *
@@ -22,18 +23,28 @@ import (
 
 /* It's a connection (bidirectional) */
 type TcpStream struct {
-	tcpstate       *reassembly.TCPSimpleFSM
-	fsmerr         bool
-	optchecker     reassembly.TCPOptionCheck
-	net, transport gopacket.Flow
-	isDNS          bool
-	isHTTP         bool
-	reversed       bool
-	client         HttpReader
-	server         HttpReader
-	urls           []string
-	ident          string
+	tcpstate       		*reassembly.TCPSimpleFSM
+	optchecker     		reassembly.TCPOptionCheck
+	net, transport 		gopacket.Flow
+	urls           		[]string
+	ident          		string
+	fsmerr         		bool
 	sync.Mutex
+
+	isHTTP         		bool
+	httpReversed   		bool
+	isHTTPS				bool
+	httpsReversed		bool
+	httpClient         	HttpReader
+	httpServer         	HttpReader
+
+	isDecrypt			bool
+	decryptReversed 	bool
+	decryptPort 		int
+	tlsClient 			TLSReader
+	tlsServer 			TLSReader
+
+	tlsStream 			*mytls.TLSStream   // tmp
 
 
 	clientWindowScale    	int // 次数统计
@@ -46,8 +57,6 @@ type TcpStream struct {
 	serverKeepAlive 		int
 	clientReset				int
 	serverReset				int
-	isHTTPS					bool
-	httpsReversed			bool
 }
 
 
@@ -55,9 +64,10 @@ type TcpStream struct {
  * The TCP factory: returns a new Stream
  */
 type TcpStreamFactory struct {
-	WG     	sync.WaitGroup
-	DoHTTP 	bool
-	hexdump *bool
+	WG     		sync.WaitGroup
+	doHTTP, doDecrypt, hexdump 	bool
+	decryptPort layers.TCPPort
+	output 		string
 }
 
 func (factory *TcpStreamFactory) WaitGoRoutines() {
@@ -72,39 +82,44 @@ func (factory TcpStreamFactory) New(netFlow, transport gopacket.Flow, tcp *layer
 	}
 
 	stream := &TcpStream{
-		net:        netFlow,
-		transport:  transport,
-		isHTTP:     (tcp.SrcPort == 80 || tcp.DstPort == 80) && factory.DoHTTP,
-		reversed:   tcp.SrcPort == 80,
-		isHTTPS: 	(tcp.SrcPort == 443 || tcp.DstPort == 443) && factory.DoHTTP,
-		httpsReversed: tcp.SrcPort == 443,
-		tcpstate:   reassembly.NewTCPSimpleFSM(fsmOptions),   // 不记录 缺少 SYN 的流
-		ident:      fmt.Sprintf("%s:%s", netFlow, transport), // 例如 10.2.203.95->122.14.230.144:54367->2018
-		optchecker: reassembly.NewTCPOptionCheck(),   	// 创建一个默认的 Option ,内容有 mss ,scale, receiveWindow
+		net:        	netFlow,
+		transport:  	transport,
+		isHTTP:     	(tcp.SrcPort == 80 || tcp.DstPort == 80) && factory.doHTTP,
+		httpReversed: 	tcp.SrcPort == 80,
+		isHTTPS: 		(tcp.SrcPort == 443 || tcp.DstPort == 443) && factory.doHTTP,
+		httpsReversed: 	tcp.SrcPort == 443,
+		isDecrypt : 	(tcp.SrcPort == factory.decryptPort || tcp.DstPort == factory.decryptPort) && factory.doDecrypt,
+		decryptReversed: tcp.SrcPort == factory.decryptPort,
+		tlsStream:      mytls.NewTLSStream(),
+
+		tcpstate:   	reassembly.NewTCPSimpleFSM(fsmOptions),   	// 不记录缺少 SYN 的流
+		ident:      	fmt.Sprintf("%s:%s", netFlow, transport), 	// 例如 10.2.203.95->122.14.230.144:54367->2018
+		optchecker: 	reassembly.NewTCPOptionCheck(),   			// 创建一个默认的 Option ,内容有 mss ,scale, receiveWindow
 		clientRetransmission:	0,
 		serverRetransmission:   0,
 		clientReset: 0,
 		serverReset: 0,
 	}
 
+	factoryWG := 0
+	if stream.isHTTP || stream.isHTTPS{
+		factoryWG ++
+		stream.httpClient = NewHTTPReader(stream,netFlow, transport,true,factory.hexdump)
+		stream.httpServer = NewHTTPReader(stream,netFlow.Reverse(),transport.Reverse(),false,factory.hexdump)
+	}
+	if stream.isDecrypt {
+		factoryWG ++
+		stream.tlsClient = NewTLSReader(stream, netFlow, transport, true, factory.hexdump, stream.tlsStream)
+		stream.tlsServer = NewTLSReader(stream, netFlow.Reverse(), transport.Reverse(), false, factory.hexdump, stream.tlsStream)
+	}
+	factory.WG.Add(factoryWG)
 	if stream.isHTTP || stream.isHTTPS {
-		stream.client = HttpReader{
-			bytes:    make(chan []byte),
-			ident:    fmt.Sprintf("%s %s", netFlow, transport),
-			hexdump:  *factory.hexdump,
-			parent:   stream,
-			isClient: true,
-		}
-		stream.server = HttpReader{
-			bytes:   make(chan []byte),
-			ident:   fmt.Sprintf("%s %s", netFlow.Reverse(), transport.Reverse()),
-			hexdump: *factory.hexdump,
-			parent:  stream,
-		}
-
-		factory.WG.Add(2)
-		go stream.client.run(&factory.WG)
-		go stream.server.run(&factory.WG)
+		go stream.httpClient.run(&factory.WG)
+		go stream.httpServer.run(&factory.WG)
+	}
+	if stream.isDecrypt {
+		go stream.tlsClient.run(&factory.WG)
+		go stream.tlsServer.run(&factory.WG)
 	}
 
 	return stream
@@ -112,7 +127,6 @@ func (factory TcpStreamFactory) New(netFlow, transport gopacket.Flow, tcp *layer
 
 
 func (t *TcpStream) Accept(tcp *layers.TCP, ci gopacket.CaptureInfo, dir reassembly.TCPFlowDirection, nextSeq reassembly.Sequence, start *bool, ac reassembly.AssemblerContext) bool {
-	// By weijiaxiang@bytedance.com
 	length := len(tcp.Payload)
 	if nextSeq != -1 {
 		diff := nextSeq.Difference(reassembly.Sequence(tcp.Seq))
@@ -197,63 +211,65 @@ func (t *TcpStream) ReassembledSG(sg reassembly.ScatterGather, ac reassembly.Ass
 	//
 	if t.isHTTP {
 		if length > 0 {
-			if dir == reassembly.TCPDirClientToServer && !t.reversed {
-				t.client.bytes <- data
+			if dir == reassembly.TCPDirClientToServer && !t.httpReversed {
+				t.httpClient.bytes <- data
 			} else {
-				t.server.bytes <- data
+				t.httpServer.bytes <- data
 			}
 		}
 	}
 
-//	if t.isHTTPS {
-//		if length > 0 {
-//			if streamIdent == t.ident {
-//				if dir == reassembly.TCPDirClientToServer && !t.httpsReversed {
-//					var got layers.TLS
-//					if err := got.DecodeFromBytes(data, gopacket.NilDecodeFeedback); err != nil {
-//					} else {
-//						var hello = tlsx.ClientHello{}
-//						err := hello.Unmarshall(data)
-//						switch err {
-//						case nil:
-//							cRandom = hello.Random
-//							fmt.Println(hello)
-//						case tlsx.ErrTlsContent:
-//							mytls.TLSDecrypt(data,tlsVersion,cipherSuite,cRandom,sRandom,seq)
-//							for i := 7; i >= 0; i-- {
-//								seq[i]++
-//								if seq[i] != 0 {
-//									return
-//								}
-//							}
-//						default:
-//							return
-//						}
-//					}
-//				} else {
-//					hello := example.ServerHello{}
-//					err := hello.Unmarshall(data)
-//					switch err {
-//					case nil:
-//						tlsVersion = hello.GetTLSVersion()
-//						cipherSuite = hello.GetTLSCipherSuite()
-//						sRandom = hello.Random
-//						fmt.Println(hello)
-//					default:
-//						return
-//					}
-//				}
-//			}
-//		}
-//	}
+
+	if t.isDecrypt {
+		if length > 0 {
+			var got layers.TLS
+			err := got.DecodeFromBytes(data, gopacket.NilDecodeFeedback)
+
+			if dir == reassembly.TCPDirClientToServer && !t.decryptReversed {
+				TLSType := uint8(data[0])
+				utils.Logging.Info().Uint8("TLS TYPE",TLSType)
+				switch TLSType {
+				case tlsx.TLSHandShake:
+					err = t.tlsStream.UnmarshalHandshake(data, mytls.ClientHello)
+					if err != nil {
+						utils.Logging.Error().Err(err).Msg("client handshake unmarshal fail")
+					}
+				case tlsx.TLSApplication:
+					t.tlsClient.bytes <- data
+				default:
+					fmt.Println("Unknown TLS type ", TLSType)
+				}
+
+			} else {
+				TLSType := uint8(data[0])
+				switch TLSType {
+				case tlsx.TLSHandShake:
+					err = t.tlsStream.UnmarshalHandshake(data, mytls.ServerHello)
+					if err != nil {
+						utils.Logging.Error().Err(err).Msg("server handshake unmarshal fail")
+					}
+					_ = t.tlsStream.EstablishConn()
+
+				case tlsx.TLSApplication:
+					t.tlsServer.bytes <- data
+				default:
+					fmt.Println("Unknown TLS type ", TLSType)
+				}
+			}
+		}
+	}
 
 }
 
 func (t *TcpStream) ReassemblyComplete(ac reassembly.AssemblerContext) bool {
 	utils.Logging.Debug().Msgf("%s: Connection closed\n", t.ident)
 	if t.isHTTP || t.isHTTPS {
-		close(t.client.bytes)
-		close(t.server.bytes)
+		close(t.httpClient.bytes)
+		close(t.httpServer.bytes)
+	}
+	if t.isDecrypt {
+		close(t.tlsClient.bytes)
+		close(t.tlsServer.bytes)
 	}
 	// do not remove the connection to allow last ACK
 	return false

@@ -6,12 +6,14 @@
 package utils
 
 type Command struct {
-	Maxcount 		int
+	Maxcount		int
 	Snaplen 		int
+	Decrypt			int
 	Decoder 		string
 	Output			string
 	Iface 			string
 	Fname 			string
+	SSLKeyLog 		string
 	Promisc 		bool
 	Lazy			bool
 	Nodefrag    	bool

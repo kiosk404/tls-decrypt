@@ -17,6 +17,7 @@ import (
 	"os/signal"
 	"sync"
 	"time"
+	"tls_decript/mytls"
 	"tls_decript/utils"
 )
 
@@ -69,8 +70,20 @@ type StreamFactory struct {
 
 
 func NewStreamFactory(packet *PcapPacket) *StreamFactory {
-	TCPStreamFactory := &TcpStreamFactory{DoHTTP: !packet.CommandLine.Nohttp}
+	TCPStreamFactory := &TcpStreamFactory{
+		doHTTP: !packet.CommandLine.Nohttp,
+		doDecrypt: packet.CommandLine.Decrypt != 0,
+		decryptPort: layers.TCPPort(packet.CommandLine.Decrypt),
+	}
 	streamPool := reassembly.NewStreamPool(TCPStreamFactory)
+
+	if packet.CommandLine.Decrypt != 0 && packet.CommandLine.SSLKeyLog == "" {
+		utils.Logging.Warn().Msg("Decrypt is enabled, but no SSL key log input")
+	}
+
+	if packet.CommandLine.SSLKeyLog != ""{
+		mytls.SetKeyLogContent(packet.CommandLine.SSLKeyLog)
+	}
 
 	return &StreamFactory{
 		TcpStreamFactory: TCPStreamFactory,
@@ -145,10 +158,9 @@ func (s *StreamFactory) Run() {
 			if s.checksum {
 				err := tcp.SetNetworkLayerForChecksum(packet.NetworkLayer())  // 检验其上层是否为 ip 协议
 				if err != nil {
-					utils.Logging.Fatal().Str("Failed to set network layer for checksum: ", err.Error())
+					utils.Logging.Fatal().Err(err).Msg("Failed to set network layer for checksum")
 				}
 			}
-
 			c := Context{
 				CaptureInfo: packet.Metadata().CaptureInfo,
 			}

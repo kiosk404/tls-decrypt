@@ -33,7 +33,9 @@ var fname = flag.String("r", "", "Filename to read from, overrides -i")
 var snaplen = flag.Int("s", 65536, "Snap length (number of bytes max to read per packet")
 var promisc = flag.Bool("promisc", true, "Set promiscuous mode")
 
-// tls_decript
+// tls_decrypt
+var decrypt = flag.Int("decrypt", 0, "TLS Decrypt Port")
+var sslkeylog = flag.String("sslkeylog","","TLS keylog file to decrypt")
 
 
 func SetLogLevel() {
@@ -64,6 +66,8 @@ func SetCommandLine() utils.Command {
 		Snaplen:		*snaplen,
 		Promisc:		*promisc,
 		Output: 		*output,
+		Decrypt: 		*decrypt,
+		SSLKeyLog: 		*sslkeylog,
 	}
 }
 

@@ -1,0 +1,9 @@
+.idea/*
+test/
+script/*.pem
+script/*.key
+script/*.txt
+script/*.srl
+script/*.csr
+script/*.pcap
+script/*.pcapng
