@@ -11,9 +11,9 @@ import (
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/reassembly"
 	"sync"
-	"tls_decript/mytls"
-	"tls_decript/mytls/tlsx"
-	"tls_decript/utils"
+	"github.com/kiosk404/tls-decrypt/tls"
+	"github.com/kiosk404/tls-decrypt/tls/tlsx"
+	"github.com/kiosk404/tls-decrypt/utils"
 )
 
 /*

@@ -1,4 +1,4 @@
-module tls_decript
+module tls-decript
 
 go 1.14
 

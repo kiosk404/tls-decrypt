@@ -17,8 +17,8 @@ import (
 	"os/signal"
 	"sync"
 	"time"
-	"tls_decript/mytls"
-	"tls_decript/utils"
+	"github.com/kiosk404/tls-decrypt/tls"
+	"github.com/kiosk404/tls-decrypt/utils"
 )
 
 /*

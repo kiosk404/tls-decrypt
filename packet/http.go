@@ -19,7 +19,7 @@ import (
 	"os"
 	"path"
 	"sync"
-	"tls_decript/utils"
+	"github.com/kiosk404/tls-decrypt/utils"
 )
 
 /*

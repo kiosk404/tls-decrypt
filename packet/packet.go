@@ -11,7 +11,7 @@ import (
 	"github.com/google/gopacket/pcap"
 	"strings"
 	"time"
-	"tls_decript/utils"
+	"github.com/kiosk404/tls-decript/utils"
 )
 
 

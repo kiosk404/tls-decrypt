@@ -7,8 +7,8 @@ package main
 
 import (
 	"flag"
-	"tls_decript/packet"
-	"tls_decript/utils"
+	"github.com/kiosk404/tls-decript/packet"
+	"github.com/kiosk404/tls-decript/utils"
 )
 
 var maxcount = flag.Int("c", -1, "Only grab this many packets, then exit")
