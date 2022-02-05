@@ -4,10 +4,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/kiosk404/tls-decrypt/tls/tlsx"
+	"github.com/kiosk404/tls-decrypt/utils"
 	"io/ioutil"
 	"strings"
-	"github.com/kiosk404/tls-decript/tls/tlsx"
-	"github.com/kiosk404/tls-decript/utils"
 )
 
 var sslKeyContent []byte
