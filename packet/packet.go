@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
+	"github.com/kiosk404/tls-decrypt/utils"
 	"strings"
 	"time"
-	"github.com/kiosk404/tls-decript/utils"
 )
 
 

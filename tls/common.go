@@ -13,8 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"golang.org/x/sys/cpu"
-
-	//"internal/cpu"
 	"io"
 	"math/big"
 	"net"

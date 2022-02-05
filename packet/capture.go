@@ -12,6 +12,7 @@ import (
 	"github.com/google/gopacket/ip4defrag"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/reassembly"
+	"github.com/kiosk404/tls-decrypt/tls"
 	"github.com/kiosk404/tls-decrypt/utils"
 	"log"
 	"os"
@@ -81,7 +82,7 @@ func NewStreamFactory(packet *PcapPacket) *StreamFactory {
 	}
 
 	if packet.CommandLine.SSLKeyLog != ""{
-		mytls.SetKeyLogContent(packet.CommandLine.SSLKeyLog)
+		tls.SetKeyLogContent(packet.CommandLine.SSLKeyLog)
 	}
 
 	return &StreamFactory{

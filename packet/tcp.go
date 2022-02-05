@@ -44,7 +44,7 @@ type TcpStream struct {
 	tlsClient 			TLSReader
 	tlsServer 			TLSReader
 
-	tlsStream 			*mytls.TLSStream   // tmp
+	tlsStream 			*tls.TLSStream   // tmp
 
 
 	clientWindowScale    	int // 次数统计
@@ -90,7 +90,7 @@ func (factory TcpStreamFactory) New(netFlow, transport gopacket.Flow, tcp *layer
 		httpsReversed: 	tcp.SrcPort == 443,
 		isDecrypt : 	(tcp.SrcPort == factory.decryptPort || tcp.DstPort == factory.decryptPort) && factory.doDecrypt,
 		decryptReversed: tcp.SrcPort == factory.decryptPort,
-		tlsStream:      mytls.NewTLSStream(),
+		tlsStream:      tls.NewTLSStream(),
 
 		tcpstate:   	reassembly.NewTCPSimpleFSM(fsmOptions),   	// 不记录缺少 SYN 的流
 		ident:      	fmt.Sprintf("%s:%s", netFlow, transport), 	// 例如 10.2.203.95->122.14.230.144:54367->2018
@@ -230,7 +230,7 @@ func (t *TcpStream) ReassembledSG(sg reassembly.ScatterGather, ac reassembly.Ass
 				utils.Logging.Info().Uint8("TLS TYPE",TLSType)
 				switch TLSType {
 				case tlsx.TLSHandShake:
-					err = t.tlsStream.UnmarshalHandshake(data, mytls.ClientHello)
+					err = t.tlsStream.UnmarshalHandshake(data, tls.ClientHello)
 					if err != nil {
 						utils.Logging.Error().Err(err).Msg("client handshake unmarshal fail")
 					}
@@ -244,7 +244,7 @@ func (t *TcpStream) ReassembledSG(sg reassembly.ScatterGather, ac reassembly.Ass
 				TLSType := uint8(data[0])
 				switch TLSType {
 				case tlsx.TLSHandShake:
-					err = t.tlsStream.UnmarshalHandshake(data, mytls.ServerHello)
+					err = t.tlsStream.UnmarshalHandshake(data, tls.ServerHello)
 					if err != nil {
 						utils.Logging.Error().Err(err).Msg("server handshake unmarshal fail")
 					}

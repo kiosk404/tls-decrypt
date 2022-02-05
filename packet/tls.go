@@ -26,10 +26,10 @@ type TLSReader struct {
 	data     []byte
 	hexdump  bool
 	parent   *TcpStream
-	tls 	 *mytls.TLSStream
+	tls 	 *tls.TLSStream
 }
 
-func NewTLSReader(parent *TcpStream, netFlow,transport gopacket.Flow, isClient,hexdump bool, tls *mytls.TLSStream) TLSReader {
+func NewTLSReader(parent *TcpStream, netFlow,transport gopacket.Flow, isClient,hexdump bool, tls *tls.TLSStream) TLSReader {
 	return TLSReader{
 		ident:    fmt.Sprintf("%s %s", netFlow, transport),
 		isClient: isClient,
