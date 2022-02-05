@@ -12,13 +12,12 @@ import (
 	"github.com/google/gopacket/ip4defrag"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/reassembly"
+	"github.com/kiosk404/tls-decrypt/utils"
 	"log"
 	"os"
 	"os/signal"
 	"sync"
 	"time"
-	"github.com/kiosk404/tls-decrypt/tls"
-	"github.com/kiosk404/tls-decrypt/utils"
 )
 
 /*
